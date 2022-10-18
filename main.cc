@@ -5,6 +5,21 @@
 #include <opencv2/highgui.hpp>
 #include "include/patch_match.hpp"
 
+float mse2psnr(float mse) {
+    mse = fmax(1e-8, mse);
+    return - 10.f * logf(mse) / logf(10.);
+}
+
+float image_psnr(const cv::Mat& src, const cv::Mat& dst) {
+    cv::Mat src_f, dst_f;
+    src.convertTo(src_f, CV_32FC3);
+    dst.convertTo(dst_f, CV_32FC3);
+    cv::Mat diff_mat = (src_f - dst_f) / 255.;
+    cv::multiply(diff_mat, diff_mat, diff_mat); // power
+    cv::Scalar mean = cv::mean(diff_mat);
+    return (mse2psnr(mean[0]) + mse2psnr(mean[1]) + mse2psnr(mean[2])) / 3.;
+}
+
 void multi_step_main(int argc, char** argv) {
     int max_range = 32;
     int max_radius = 4, pad_size = max_range + max_radius;
@@ -13,16 +28,21 @@ void multi_step_main(int argc, char** argv) {
     cv::resize(prev_img, prev_img, prev_img.size() * 2);
     cv::resize(next_img, next_img, next_img.size() * 2);
     cv::Mat out = prev_img.clone();
+    cv::Mat original_next = next_img.clone();
     cv::Mat arrow(prev_img.rows, prev_img.cols, CV_8UC3);
     cv::copyMakeBorder(prev_img, prev_img, pad_size, pad_size, pad_size, pad_size, cv::BORDER_REFLECT);
     cv::copyMakeBorder(next_img, next_img, pad_size, pad_size, pad_size, pad_size, cv::BORDER_REFLECT);
     
-    TicToc timer;
-    multi_step_searching(prev_img, next_img, arrow, out, max_range, max_radius, &timer);
+    TicToc* timer = nullptr;
+    multi_step_searching(prev_img, next_img, arrow, out, max_range, max_radius, timer);
 
-    cv::imshow("optic-flow", out);
-    cv::imshow("arrow", arrow);
+    float psnr = image_psnr(out, original_next);
+    printf("PSNR: %f\n", psnr);
+    cv::imshow("predict", out);
+    cv::imshow("error", original_next - out);
+    cv::imshow("motion", arrow);
     cv::waitKey(0);
+    delete timer;
 }
 
 void exhaustive_main(int argc, char** argv) {
@@ -38,18 +58,27 @@ void exhaustive_main(int argc, char** argv) {
     
     cv::copyMakeBorder(prev_img, prev_img, 0, rows, 0, cols, cv::BORDER_REFLECT);
     cv::copyMakeBorder(next_img, next_img, 0, rows, 0, cols, cv::BORDER_REFLECT);
+    cv::Mat original_next = next_img.clone();
     cv::Mat out = prev_img.clone();
     cv::Mat arrow = prev_img.clone();
 
-    TicToc timer;
-    exhaustive_search(prev_img, next_img, arrow, out, patch_size, &timer);
+    TicToc* timer = nullptr;
+    exhaustive_search(prev_img, next_img, arrow, out, patch_size, timer);
 
-    cv::imshow("optic-flow", out);
-    cv::imshow("arrow", arrow);
+    float psnr = image_psnr(out, next_img);
+    printf("PSNR: %f\n", psnr);
+    cv::imshow("predict", out);
+    cv::imshow("error", next_img - out);
+    cv::imshow("motion", arrow);
     cv::waitKey(0);
+    delete timer;
 }
 
 int main(int argc, char** argv) {
-    multi_step_main(argc, argv);
+    if (argc > 1) {
+        multi_step_main(argc, argv);
+    } else {
+        exhaustive_main(argc, argv);
+    }
     return 0;
 }
