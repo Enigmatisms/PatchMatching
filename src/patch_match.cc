@@ -1,13 +1,9 @@
 #include "../include/patch_match.hpp"
 
-float get_image_cost(const cv::Mat& target, const cv::Mat& inquiry) {
-    cv::Mat output(target.size(), CV_32FC3);
-    cv::absdiff(target, inquiry, output);
-    cv::Scalar result = cv::sum(output);
-    return 0.333 * (result[0] + result[1] + result[2]);
-}
+std::unique_ptr<TicToc> timer;
 
-float get_image_cost(const cv::Mat& target, cv::Mat&& inquiry) {
+template<typename MatType>
+float get_image_cost(const cv::Mat& target, MatType&& inquiry) {
     cv::Mat output(target.size(), CV_32FC3);
     cv::absdiff(target, inquiry, output);
     cv::Scalar result = cv::sum(output);
@@ -50,7 +46,7 @@ cv::Point recursive_search(const cv::Mat& prev_target, const cv::Mat& next, cv::
     return recursive_search(prev_target, next, min_mv, cost, step_size * 0.75, patch_radius, rows, cols);
 }
 
-void multi_step_searching(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int step_size, int patch_radius, TicToc* timer) {
+void multi_step_searching(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int step_size, int patch_radius) {
     int rows = prev.rows, cols = prev.cols;
     int start_offset = step_size + patch_radius;
     int max_rows = rows - start_offset, max_cols = cols - start_offset;
@@ -60,7 +56,7 @@ void multi_step_searching(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arr
     if (timer != nullptr) {
         timer->tic();
     }
-    #pragma omp parallel for num_threads(16)
+    #pragma omp parallel for num_threads(8)
     for (int i = start_offset; i < max_rows; i++) {
         for (int j = start_offset; j < max_cols; j++) {
             cv::Point prev_anchor(j, i);
@@ -87,13 +83,13 @@ void multi_step_searching(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arr
 }
 
 // 穷举法无需padding
-void exhaustive_search(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int patch_size, TicToc* timer) {
+void exhaustive_search(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int patch_size) {
     int rows = prev.rows, cols = prev.cols;
     int row_ps = rows / patch_size, col_ps = cols / patch_size;
     if (timer != nullptr) {
         timer->tic();
     }
-    #pragma omp parallel for num_threads(16)
+    #pragma omp parallel for num_threads(8)
     for (int i = 0; i < row_ps; i++) {
         for (int j = 0; j < col_ps; j++) {
             cv::Point current_pos = cv::Point(j, i) * patch_size;
@@ -119,6 +115,88 @@ void exhaustive_search(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow,
     }
     if (timer != nullptr) {
         printf("Running time: %.4lf ms\n", timer->toc());
+    }
+    printf("Process completed.\n");
+}
+
+void pyramid_searching(
+    const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int patch_radius, int pyramid_lv
+) {
+    cv::Size start_size = prev.size();
+    cv::Mat img_offset;
+    bool pyramid_ready = false;
+    if (timer != nullptr) {
+        timer->tic();
+    }
+    for (int lv = 0; lv < pyramid_lv; lv++) {
+        int left_mv = (pyramid_lv - lv - 1);
+        cv::Size new_size = cv::Size(start_size.width >> left_mv, start_size.height >> left_mv);
+        if (pyramid_ready == false) {
+            img_offset.create(new_size, CV_16SC2);
+        } else {
+            // 已经保证了输入图像原始大小可以被8整除（padding）
+            cv::resize(img_offset, img_offset, new_size, 0., 0., cv::INTER_LINEAR);
+            img_offset *= 2.0;
+        }
+        cv::Mat p_prev, p_next;
+        cv::resize(prev, p_prev, new_size);
+        cv::resize(next, p_next, new_size);
+        int padding_size = patch_radius + (patch_radius << lv);
+        cv::copyMakeBorder(p_prev, p_prev, padding_size, padding_size, padding_size, padding_size, cv::BORDER_REFLECT);
+        cv::copyMakeBorder(p_next, p_next, padding_size, padding_size, padding_size, padding_size, cv::BORDER_REFLECT);
+        cv::Point offset(padding_size, padding_size);
+        int max_cols = p_prev.cols - padding_size, max_rows = p_prev.rows - padding_size;
+
+        #pragma omp parallel for num_threads(8)
+        for (int row = padding_size; row < max_rows; row++) {
+            for (int col = padding_size; col < max_cols; col++) {
+                cv::Point p_anchor(col, row), actual_index = p_anchor - offset;
+                cv::Mat p_pat = center_extract(p_prev, p_anchor, patch_radius);
+                float min_cost = 1e9;
+                cv::Vec2s min_mv(0, 0);
+                int guide_x = 0, guide_y = 0;
+                if (pyramid_ready == true) {
+                    cv::Vec2s tmp = img_offset.at<cv::Vec2s>(actual_index);
+                    guide_x = tmp[0];
+                    guide_y = tmp[1];
+                }
+                for (int i = -patch_radius; i <= patch_radius; i++) {
+                    for (int j = -patch_radius; j <= patch_radius; j++) {
+                        cv::Mat n_pat = center_extract(p_next, p_anchor + cv::Point(j + guide_x, i + guide_y), patch_radius);
+                        float cost = get_image_cost(p_pat, n_pat);
+                        if (cost < min_cost) {
+                            min_cost = cost;
+                            min_mv[0] = j + guide_x;
+                            min_mv[1] = i + guide_y;
+                        }
+                    }
+                }
+                img_offset.at<cv::Vec2s>(actual_index) = min_mv;
+            }
+        }
+        pyramid_ready = true;
+    }
+    if (timer != nullptr) {
+        printf("Running time: %.4lf ms\n", timer->toc());
+    }
+    output.forEach<cv::Vec3b>(
+        [&prev, &img_offset, &start_size](cv::Vec3b& color, const int* pos) -> void {
+            cv::Vec2s point_mv = img_offset.at<cv::Vec2s>(pos[0], pos[1]);      // TODO
+            int x = pos[1] - point_mv[0], y = pos[0] - point_mv[1];
+            if (x >= 0 && x < start_size.width && y >= 0 && y < start_size.height) {
+                color = prev.at<cv::Vec3b>(y, x);
+            } else {
+                color = prev.at<cv::Vec3b>(pos[0], pos[1]);
+            }
+        }
+    );
+    #pragma omp parallel for num_threads(4)
+    for (int i = 0; i < start_size.height; i += 20) {
+        for (int j = 0; j < start_size.width; j += 20) {
+            cv::Vec2s point_mv = img_offset.at<cv::Vec2s>(i, j);
+            cv::Point sp(j, i), ep(j + point_mv[0], i + point_mv[1]);
+            cv::arrowedLine(arrow, sp, ep, cv::Scalar(0, 255, 0));
+        }
     }
     printf("Process completed.\n");
 }

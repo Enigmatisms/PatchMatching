@@ -7,6 +7,8 @@
 
 #define TERMINATION 2
 
+extern std::unique_ptr<TicToc> timer;
+
 const std::array<cv::Point2f, 16> DIRECTS = {
     cv::Point2f(-1, 1), cv::Point2f(-0.5, 1), cv::Point2f(0, 1), cv::Point2f(0.5, 1), cv::Point2f(1, 1),
     cv::Point2f(-1, 0.5),                                                             cv::Point2f(1, 0.5), 
@@ -25,8 +27,13 @@ inline void border_padding_size(int &rows, int &cols, int patch_size) {
     }
 }
 
+// 金字塔搜索（上一次搜索结果可以作为本次搜索结果的初始化）
+void pyramid_searching(
+    const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int patch_radius, int pyramid_lv = 4
+);
+
 // N步搜索法，可以配置为3步
-void multi_step_searching(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int step_size, int patch_radius = 2, TicToc* timer = nullptr);
+void multi_step_searching(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int step_size, int patch_radius = 2);
 
 // 穷举法
-void exhaustive_search(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int patch_radius, TicToc* timer = nullptr);
+void exhaustive_search(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int patch_radius);

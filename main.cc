@@ -33,8 +33,8 @@ void multi_step_main(int argc, char** argv) {
     cv::copyMakeBorder(prev_img, prev_img, pad_size, pad_size, pad_size, pad_size, cv::BORDER_REFLECT);
     cv::copyMakeBorder(next_img, next_img, pad_size, pad_size, pad_size, pad_size, cv::BORDER_REFLECT);
     
-    TicToc* timer = nullptr;
-    multi_step_searching(prev_img, next_img, arrow, out, max_range, max_radius, timer);
+    timer = std::unique_ptr<TicToc>(new TicToc);
+    multi_step_searching(prev_img, next_img, arrow, out, max_range, max_radius);
 
     float psnr = image_psnr(out, original_next);
     printf("PSNR: %f\n", psnr);
@@ -42,7 +42,6 @@ void multi_step_main(int argc, char** argv) {
     cv::imshow("error", original_next - out);
     cv::imshow("motion", arrow);
     cv::waitKey(0);
-    delete timer;
 }
 
 void exhaustive_main(int argc, char** argv) {
@@ -58,12 +57,11 @@ void exhaustive_main(int argc, char** argv) {
     
     cv::copyMakeBorder(prev_img, prev_img, 0, rows, 0, cols, cv::BORDER_REFLECT);
     cv::copyMakeBorder(next_img, next_img, 0, rows, 0, cols, cv::BORDER_REFLECT);
-    cv::Mat original_next = next_img.clone();
     cv::Mat out = prev_img.clone();
     cv::Mat arrow = prev_img.clone();
 
-    TicToc* timer = nullptr;
-    exhaustive_search(prev_img, next_img, arrow, out, patch_size, timer);
+    timer = std::unique_ptr<TicToc>(new TicToc);
+    exhaustive_search(prev_img, next_img, arrow, out, patch_size);
 
     float psnr = image_psnr(out, next_img);
     printf("PSNR: %f\n", psnr);
@@ -71,14 +69,38 @@ void exhaustive_main(int argc, char** argv) {
     cv::imshow("error", next_img - out);
     cv::imshow("motion", arrow);
     cv::waitKey(0);
-    delete timer;
+}
+
+void pyramid_main(int argc, char** argv) {
+    cv::Mat prev_img = cv::imread("../prev.bmp");
+    cv::Mat next_img = cv::imread("../next.bmp");
+    cv::resize(prev_img, prev_img, prev_img.size() * 2);
+    cv::resize(next_img, next_img, next_img.size() * 2);
+    int rows = prev_img.rows, cols = prev_img.cols;
+    border_padding_size(rows, cols, 8);
+    rows -= prev_img.rows;
+    cols -= prev_img.cols;
+    cv::copyMakeBorder(prev_img, prev_img, 0, rows, 0, cols, cv::BORDER_REFLECT);
+    cv::copyMakeBorder(next_img, next_img, 0, rows, 0, cols, cv::BORDER_REFLECT);
+    cv::Mat out = prev_img.clone();
+    cv::Mat arrow = prev_img.clone();
+    timer = std::unique_ptr<TicToc>(new TicToc);
+    pyramid_searching(prev_img, next_img, arrow, out, 2);
+
+    float psnr = image_psnr(out, next_img);
+    printf("PSNR: %f\n", psnr);
+    cv::imshow("predict", out);
+    cv::imshow("error", next_img - out);
+    cv::imshow("motion", arrow);
+    cv::waitKey(0);
 }
 
 int main(int argc, char** argv) {
+    cv::setNumThreads(2);
     if (argc > 1) {
         multi_step_main(argc, argv);
     } else {
-        exhaustive_main(argc, argv);
+        pyramid_main(argc, argv);
     }
     return 0;
 }
