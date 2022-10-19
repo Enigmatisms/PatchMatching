@@ -2,6 +2,7 @@
 
 std::unique_ptr<TicToc> timer;
 
+// Cost is based on SAD
 template<typename MatType>
 float get_image_cost(const cv::Mat& target, MatType&& inquiry) {
     cv::Mat output(target.size(), CV_32FC3);
@@ -43,7 +44,7 @@ cv::Point recursive_search(const cv::Mat& prev_target, const cv::Mat& next, cv::
             }
         }
     }
-    return recursive_search(prev_target, next, min_mv, cost, step_size * 0.75, patch_radius, rows, cols);
+    return recursive_search(prev_target, next, min_mv, cost, step_size * TSS_STEP, patch_radius, rows, cols);
 }
 
 void multi_step_searching(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int step_size, int patch_radius) {

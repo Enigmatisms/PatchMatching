@@ -6,6 +6,7 @@
 #include "tictoc.hpp"
 
 #define TERMINATION 2
+#define TSS_STEP 0.75
 
 extern std::unique_ptr<TicToc> timer;
 

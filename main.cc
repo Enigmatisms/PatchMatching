@@ -5,7 +5,7 @@
 #include <opencv2/highgui.hpp>
 #include "include/patch_match.hpp"
 
-float mse2psnr(float mse) {
+inline float mse2psnr(float mse) {
     mse = fmax(1e-8, mse);
     return - 10.f * logf(mse) / logf(10.);
 }
@@ -23,6 +23,15 @@ float image_psnr(const cv::Mat& src, const cv::Mat& dst) {
 void multi_step_main(int argc, char** argv) {
     int max_range = 32;
     int max_radius = 4, pad_size = max_range + max_radius;
+    if (argc < 4) {
+        printf("TSS usage: ./Task <mode> <max search range> <patch radius> <use timer? any: yes, nothing: no>\n");
+    } else {
+        max_range = atoi(argv[2]);
+        max_radius = atoi(argv[3]);
+        if (argc > 4) {
+            timer = std::unique_ptr<TicToc>(new TicToc);
+        }
+    }
     cv::Mat prev_img = cv::imread("../prev.bmp");
     cv::Mat next_img = cv::imread("../next.bmp");
     cv::resize(prev_img, prev_img, prev_img.size() * 2);
@@ -33,7 +42,6 @@ void multi_step_main(int argc, char** argv) {
     cv::copyMakeBorder(prev_img, prev_img, pad_size, pad_size, pad_size, pad_size, cv::BORDER_REFLECT);
     cv::copyMakeBorder(next_img, next_img, pad_size, pad_size, pad_size, pad_size, cv::BORDER_REFLECT);
     
-    timer = std::unique_ptr<TicToc>(new TicToc);
     multi_step_searching(prev_img, next_img, arrow, out, max_range, max_radius);
 
     float psnr = image_psnr(out, original_next);
@@ -45,6 +53,9 @@ void multi_step_main(int argc, char** argv) {
 }
 
 void exhaustive_main(int argc, char** argv) {
+    if (argc > 2) {
+        timer = std::unique_ptr<TicToc>(new TicToc);
+    }
     int patch_size = 16;
     cv::Mat prev_img = cv::imread("../prev.bmp");
     cv::Mat next_img = cv::imread("../next.bmp");
@@ -60,7 +71,6 @@ void exhaustive_main(int argc, char** argv) {
     cv::Mat out = prev_img.clone();
     cv::Mat arrow = prev_img.clone();
 
-    timer = std::unique_ptr<TicToc>(new TicToc);
     exhaustive_search(prev_img, next_img, arrow, out, patch_size);
 
     float psnr = image_psnr(out, next_img);
@@ -72,6 +82,9 @@ void exhaustive_main(int argc, char** argv) {
 }
 
 void pyramid_main(int argc, char** argv) {
+    if (argc > 2) {
+        timer = std::unique_ptr<TicToc>(new TicToc);
+    }
     cv::Mat prev_img = cv::imread("../prev.bmp");
     cv::Mat next_img = cv::imread("../next.bmp");
     cv::resize(prev_img, prev_img, prev_img.size() * 2);
@@ -84,7 +97,6 @@ void pyramid_main(int argc, char** argv) {
     cv::copyMakeBorder(next_img, next_img, 0, rows, 0, cols, cv::BORDER_REFLECT);
     cv::Mat out = prev_img.clone();
     cv::Mat arrow = prev_img.clone();
-    timer = std::unique_ptr<TicToc>(new TicToc);
     pyramid_searching(prev_img, next_img, arrow, out, 2);
 
     float psnr = image_psnr(out, next_img);
@@ -97,10 +109,17 @@ void pyramid_main(int argc, char** argv) {
 
 int main(int argc, char** argv) {
     cv::setNumThreads(2);
-    if (argc > 1) {
-        multi_step_main(argc, argv);
+    if (argc < 2) {
+        printf("Usage: ./Task <mode: 0 EMBA, 1: TSS(multi-step, not 3 steps), 2: HMBA>\n");
+        return 1;
     } else {
-        pyramid_main(argc, argv);
+        switch (atoi(argv[1])) {
+            case 0: {exhaustive_main(argc, argv); break;}
+            case 1: {multi_step_main(argc, argv); break;}
+            case 2: {pyramid_main(argc, argv); break;}
+            default: {pyramid_main(argc, argv); break;}
+        };
+        cv::destroyAllWindows();
     }
     return 0;
 }
