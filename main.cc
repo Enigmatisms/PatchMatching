@@ -87,6 +87,8 @@ void pyramid_main(int argc, char** argv) {
     }
     cv::Mat prev_img = cv::imread("../prev.bmp");
     cv::Mat next_img = cv::imread("../next.bmp");
+    
+    printf("Prev size: (%d, %d), next size: (%d, %d)\n", prev_img.cols, prev_img.rows, next_img.cols, prev_img.rows);
     cv::resize(prev_img, prev_img, prev_img.size() * 2);
     cv::resize(next_img, next_img, next_img.size() * 2);
     int rows = prev_img.rows, cols = prev_img.cols;
@@ -95,9 +97,10 @@ void pyramid_main(int argc, char** argv) {
     cols -= prev_img.cols;
     cv::copyMakeBorder(prev_img, prev_img, 0, rows, 0, cols, cv::BORDER_REFLECT);
     cv::copyMakeBorder(next_img, next_img, 0, rows, 0, cols, cv::BORDER_REFLECT);
+    printf("Prev size: (%d, %d), next size: (%d, %d)\n", prev_img.cols, prev_img.rows, next_img.cols, prev_img.rows);
     cv::Mat out = prev_img.clone();
     cv::Mat arrow = prev_img.clone();
-    pyramid_searching(prev_img, next_img, arrow, out, 2);
+    pyramid_searching(prev_img, next_img, arrow, out, 4);
 
     float psnr = image_psnr(out, next_img);
     printf("PSNR: %f\n", psnr);

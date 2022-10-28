@@ -6,6 +6,8 @@ std::unique_ptr<TicToc> timer;
 template<typename MatType>
 float get_image_cost(const cv::Mat& target, MatType&& inquiry) {
     cv::Mat output(target.size(), CV_32FC3);
+    // cv::normalize(inquiry, norm_inq);
+    // cv::normalize(target, norm_tar);
     cv::absdiff(target, inquiry, output);
     cv::Scalar result = cv::sum(output);
     return 0.333 * (result[0] + result[1] + result[2]);
@@ -57,7 +59,7 @@ void multi_step_searching(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arr
     if (timer != nullptr) {
         timer->tic();
     }
-    #pragma omp parallel for num_threads(8)
+    #pragma omp parallel for num_threads(16)
     for (int i = start_offset; i < max_rows; i++) {
         for (int j = start_offset; j < max_cols; j++) {
             cv::Point prev_anchor(j, i);
@@ -129,6 +131,7 @@ void pyramid_searching(
     if (timer != nullptr) {
         timer->tic();
     }
+    int padding_size = patch_radius * 2;
     for (int lv = 0; lv < pyramid_lv; lv++) {
         int left_mv = (pyramid_lv - lv - 1);
         cv::Size new_size = cv::Size(start_size.width >> left_mv, start_size.height >> left_mv);
@@ -142,11 +145,12 @@ void pyramid_searching(
         cv::Mat p_prev, p_next;
         cv::resize(prev, p_prev, new_size);
         cv::resize(next, p_next, new_size);
-        int padding_size = patch_radius + (patch_radius << lv);
         cv::copyMakeBorder(p_prev, p_prev, padding_size, padding_size, padding_size, padding_size, cv::BORDER_REFLECT);
         cv::copyMakeBorder(p_next, p_next, padding_size, padding_size, padding_size, padding_size, cv::BORDER_REFLECT);
         cv::Point offset(padding_size, padding_size);
         int max_cols = p_prev.cols - padding_size, max_rows = p_prev.rows - padding_size;
+
+        printf("Max row: %d, max col: %d, padding size: %d\n", max_rows, max_cols, padding_size);
 
         #pragma omp parallel for num_threads(8)
         for (int row = padding_size; row < max_rows; row++) {
@@ -175,6 +179,7 @@ void pyramid_searching(
                 img_offset.at<cv::Vec2s>(actual_index) = min_mv;
             }
         }
+        padding_size += (patch_radius << (lv + 1));
         pyramid_ready = true;
     }
     if (timer != nullptr) {
