@@ -122,8 +122,8 @@ void exhaustive_search(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow,
     printf("Process completed.\n");
 }
 
-void pyramid_searching(
-    const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int patch_radius, int pyramid_lv
+cv::Mat pyramid_searching(
+    const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int patch_radius, int pyramid_lv, bool only_row
 ) {
     cv::Size start_size = prev.size();
     cv::Mat img_offset;
@@ -151,7 +151,7 @@ void pyramid_searching(
         int max_cols = p_prev.cols - padding_size, max_rows = p_prev.rows - padding_size;
 
         printf("Max row: %d, max col: %d, padding size: %d\n", max_rows, max_cols, padding_size);
-
+        int row_search = (only_row == true) ? 0 : patch_radius;
         #pragma omp parallel for num_threads(8)
         for (int row = padding_size; row < max_rows; row++) {
             for (int col = padding_size; col < max_cols; col++) {
@@ -165,7 +165,7 @@ void pyramid_searching(
                     guide_x = tmp[0];
                     guide_y = tmp[1];
                 }
-                for (int i = -patch_radius; i <= patch_radius; i++) {
+                for (int i = -row_search; i <= row_search; i++) {
                     for (int j = -patch_radius; j <= patch_radius; j++) {
                         cv::Mat n_pat = center_extract(p_next, p_anchor + cv::Point(j + guide_x, i + guide_y), patch_radius);
                         float cost = get_image_cost(p_pat, n_pat);
@@ -205,4 +205,5 @@ void pyramid_searching(
         }
     }
     printf("Process completed.\n");
+    return img_offset;
 }

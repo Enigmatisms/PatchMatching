@@ -56,3 +56,12 @@ target_link_libraries(Task
     ${OpenCV_LIBS}
     pthread
 )
+
+add_executable(disp pyramid_disparity.cc
+    ${SRC}
+)
+
+target_link_libraries(disp
+    ${OpenCV_LIBS}
+    pthread
+)

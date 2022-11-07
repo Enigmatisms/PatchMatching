@@ -29,8 +29,8 @@ inline void border_padding_size(int &rows, int &cols, int patch_size) {
 }
 
 // 金字塔搜索（上一次搜索结果可以作为本次搜索结果的初始化）
-void pyramid_searching(
-    const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int patch_radius, int pyramid_lv = 4
+cv::Mat pyramid_searching(
+    const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int patch_radius, int pyramid_lv = 4, bool only_row = false
 );
 
 // N步搜索法，可以配置为3步
