@@ -123,7 +123,8 @@ void exhaustive_search(const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow,
 }
 
 cv::Mat pyramid_searching(
-    const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output, int patch_radius, int pyramid_lv, bool only_row
+    const cv::Mat& prev, const cv::Mat& next, cv::Mat& arrow, cv::Mat& output,
+    int patch_radius, int pyramid_lv, bool only_row, bool blur, SearchOption l2r
 ) {
     cv::Size start_size = prev.size();
     cv::Mat img_offset;
@@ -139,6 +140,9 @@ cv::Mat pyramid_searching(
             img_offset.create(new_size, CV_16SC2);
         } else {
             // 已经保证了输入图像原始大小可以被8整除（padding）
+            if (blur == true) {
+                cv::blur(img_offset, img_offset, cv::Size(3, 3));
+            }
             cv::resize(img_offset, img_offset, new_size, 0., 0., cv::INTER_LINEAR);
             img_offset *= 2.0;
         }
@@ -165,8 +169,10 @@ cv::Mat pyramid_searching(
                     guide_x = tmp[0];
                     guide_y = tmp[1];
                 }
+                int col_start = (l2r < 2) ? -patch_radius : 0;
+                int col_end = col_start + ((l2r == 0) ? (patch_radius << 1) : patch_radius);
                 for (int i = -row_search; i <= row_search; i++) {
-                    for (int j = -patch_radius; j <= patch_radius; j++) {
+                    for (int j = col_start; j <= col_end; j++) {
                         cv::Mat n_pat = center_extract(p_next, p_anchor + cv::Point(j + guide_x, i + guide_y), patch_radius);
                         float cost = get_image_cost(p_pat, n_pat);
                         if (cost < min_cost) {
